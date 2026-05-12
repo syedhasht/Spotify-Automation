@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>⚡ Spotify Automation Hub</title>
+    <link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@400;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; background: #0d0d0d; font-family: 'Oxanium', sans-serif; overflow: hidden; }
+
+      @keyframes pulse-dot {
+        0%, 100% { box-shadow: 0 0 4px #00FF94, 0 0 8px #00FF94; }
+        50% { box-shadow: 0 0 14px #00FF94, 0 0 28px #00FF94; }
+      }
+      @keyframes slideUp {
+        from { transform: translateY(12px); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+      }
+      @keyframes fadeInCol {
+        from { opacity: 0; transform: translateY(16px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      @keyframes toastIn {
+        from { transform: translateX(120%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+      }
+      @keyframes toastOut {
+        from { transform: translateX(0); opacity: 1; }
+        to { transform: translateX(120%); opacity: 0; }
+      }
+
+      .col-1 { animation: fadeInCol 0.5s ease both; animation-delay: 0ms; }
+      .col-2 { animation: fadeInCol 0.5s ease both; animation-delay: 120ms; }
+      .col-3 { animation: fadeInCol 0.5s ease both; animation-delay: 240ms; }
+
+      .pulse-dot { animation: pulse-dot 1.8s ease-in-out infinite; }
+
+      .log-line { animation: slideUp 0.3s ease both; }
+
+      .btn { transition: all 0.15s ease; cursor: pointer; border: none; font-family: 'Oxanium', sans-serif; font-weight: 700; }
+      .btn:hover { transform: scale(1.04); filter: brightness(1.2); }
+      .btn:active { transform: scale(0.97); }
+
+      .search-bar:focus {
+        border-color: #00FF94 !important;
+        box-shadow: 0 0 16px #00FF9455;
+        outline: none;
+      }
+      .search-bar { transition: border-color 0.2s ease, box-shadow 0.2s ease; }
+
+      .like-btn:hover { box-shadow: 0 0 20px #FF2D78; }
+      .skip-btn:hover { box-shadow: 0 0 20px #00BFFF; }
+      .pair-btn:hover { box-shadow: 0 0 14px #00FF94; }
+      .connect-btn:hover { box-shadow: 0 0 14px #00BFFF; }
+
+      .device-pill { transition: all 0.15s ease; }
+      .device-pill:hover { transform: scale(1.02); }
+
+      .log-scroll::-webkit-scrollbar { width: 4px; }
+      .log-scroll::-webkit-scrollbar-track { background: #000; }
+      .log-scroll::-webkit-scrollbar-thumb { background: #FF2D78; border-radius: 4px; }
+
+      .toast { animation: toastIn 0.4s ease both; }
+      .toast.out { animation: toastOut 0.4s ease both; }
+
+      input { font-family: 'Oxanium', sans-serif; }
+      input::placeholder { color: #555; }
+      input:focus { outline: none; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

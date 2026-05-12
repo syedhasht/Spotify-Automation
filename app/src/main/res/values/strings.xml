@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Spotify Automation</string>
+    <string name="accessibility_service_name">Spotify Automation Service</string>
+    <string name="accessibility_service_description">High-fidelity autonomous Spotify automation engine (JDK 8).</string>
+</resources>
