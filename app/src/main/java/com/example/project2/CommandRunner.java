@@ -1374,6 +1374,7 @@ public class CommandRunner {
         
         report(commandId, "FINAL", finalSuccess ? "OK" : "FAILED", result.reason);
         emitServiceLog(cmd, finalSuccess);
+        closeSpotifyAfterTask();
         
         taskContext.isCompleted = true;
         TaskManager.completeTask(taskContext.currentTaskId);
@@ -1385,6 +1386,49 @@ public class CommandRunner {
         if (taskContext.resetOnCompletion) {
             resetTaskState();
         }
+    }
+
+    private void closeSpotifyAfterTask() {
+        Log.i(TAG, "[CLEANUP][SPOTIFY_CLOSE][START]");
+
+        String failureReason = null;
+        try {
+            Process process = Runtime.getRuntime().exec(new String[] {"am", "force-stop", "com.spotify.music"});
+            int exitCode = process.waitFor();
+            if (exitCode == 0) {
+                Log.i(TAG, "[CLEANUP][SPOTIFY_CLOSE][SUCCESS]");
+                return;
+            }
+            failureReason = "force_stop_exit_code_" + exitCode;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            failureReason = "force_stop_interrupted";
+        } catch (Exception e) {
+            failureReason = "force_stop_exception_" + e.getClass().getSimpleName();
+        }
+
+        boolean homeFallback = false;
+        try {
+            homeFallback = service.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME);
+        } catch (Exception e) {
+            if (failureReason == null || failureReason.isEmpty()) {
+                failureReason = "home_fallback_exception_" + e.getClass().getSimpleName();
+            } else {
+                failureReason += "|home_fallback_exception_" + e.getClass().getSimpleName();
+            }
+        }
+
+        if (homeFallback) {
+            Log.i(TAG, "[CLEANUP][SPOTIFY_CLOSE][SUCCESS]");
+            return;
+        }
+
+        if (failureReason == null || failureReason.isEmpty()) {
+            failureReason = "force_stop_failed_and_home_fallback_failed";
+        } else {
+            failureReason += "|home_fallback_failed";
+        }
+        Log.w(TAG, "[CLEANUP][SPOTIFY_CLOSE][FAILED] reason=" + failureReason);
     }
 
     private void resetTaskState() {

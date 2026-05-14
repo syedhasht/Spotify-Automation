@@ -1255,9 +1255,25 @@ public class SpotifyActions {
             if (root == null)
                 continue;
 
+            AccessibilityNodeInfo playBtn = findPlaylistPlayButton(root);
+
+            if (playBtn != null) {
+                Log.i(TAG, "[PLAYBACK][FOUND] Clicking Play button");
+                boolean ok = clickPlaylistPlayButton(playBtn);
+                playBtn.recycle();
+                root.recycle();
+                if (ok) {
+                    try {
+                        Thread.sleep(2500);
+                    } catch (Exception ignored) {
+                    }
+                    return true;
+                }
+            }
+
             // Use exact match for "Play" to avoid colliding with "Search in playlist" or
             // other descriptions containing 'play'
-            AccessibilityNodeInfo playBtn = findNodeByDescriptionExact(root, "Play");
+            playBtn = findNodeByDescriptionExact(root, "Play");
             if (playBtn == null)
                 playBtn = findNodeByDescriptionExact(root, "Shuffle play");
             if (playBtn == null)
@@ -1292,6 +1308,23 @@ public class SpotifyActions {
             return ok;
         }
         return false;
+    }
+
+    private boolean clickPlaylistPlayButton(AccessibilityNodeInfo node) {
+        if (node == null)
+            return false;
+
+        String resId = node.getViewIdResourceName();
+        boolean isPlayPauseButton = resId != null && resId.contains("button_play_and_pause");
+
+        if (isPlayPauseButton) {
+            if (node.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+                return true;
+
+            return navigator.tapNodeCenter(node);
+        }
+
+        return clickNodeWithParentTraversal(node, 3);
     }
 
     private AccessibilityNodeInfo findNodeByDescriptionExact(AccessibilityNodeInfo node, String desc) {

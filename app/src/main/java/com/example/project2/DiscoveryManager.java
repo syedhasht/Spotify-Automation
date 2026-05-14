@@ -6,9 +6,10 @@ import android.net.LinkAddress;
 import android.net.LinkProperties;
 import android.net.Network;
 import android.util.Log;
+import org.json.JSONObject;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
 import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.net.Socket;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -51,18 +52,29 @@ public class DiscoveryManager {
                 Log.w(TAG, "[DISCOVERY] Last known IP " + lastKnownIp + " is not our server — scanning.");
             }
 
-            // 2. Scan local subnet
+            // 2. Listen for the backend's UDP discovery broadcast before scanning a /24.
+            String discoveredIp = listenForBroadcastIp(6000);
+            if (discoveredIp != null) {
+                saveIp(discoveredIp);
+                callback.onServerFound(discoveredIp);
+                return;
+            }
+
+            // 3. Scan local subnet derived from the device's current IPv4 address
             String localIp = getLocalIpAddress();
-            if (localIp != null && localIp.startsWith("192.168.")) {
-                String subnet = localIp.substring(0, localIp.lastIndexOf(".") + 1);
+            String subnet = deriveSubnetPrefix(localIp);
+            if (subnet != null) {
+                Log.i(TAG, "[DISCOVERY] Local IP: " + localIp);
                 Log.i(TAG, "[DISCOVERY] Scanning subnet: " + subnet + "0/24");
 
-                String foundIp = scanSubnet(subnet);
+                String foundIp = scanSubnet(subnet, localIp);
                 if (foundIp != null) {
                     saveIp(foundIp);
                     callback.onServerFound(foundIp);
                     return;
                 }
+            } else {
+                Log.w(TAG, "[DISCOVERY] Could not determine an IPv4 subnet from local address: " + localIp);
             }
 
             Log.w(TAG, "[DISCOVERY] No server found on local network.");
@@ -75,31 +87,78 @@ public class DiscoveryManager {
      */
     private boolean isOurServer(String ip) {
         try {
-            java.net.URL url = new java.net.URL("http://" + ip + ":" + SERVER_PORT + "/ping");
+            String urlString = "http://" + ip + ":" + SERVER_PORT + "/ping";
+            Log.i(TAG, "[DISCOVERY][PROBING] " + urlString);
+
+            java.net.URL url = new java.net.URL(urlString);
             java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
-            conn.setConnectTimeout(1500);
-            conn.setReadTimeout(1500);
+            conn.setConnectTimeout(1000);
+            conn.setReadTimeout(1000);
             conn.setRequestMethod("GET");
             int code = conn.getResponseCode();
+            Log.i(TAG, "[DISCOVERY][HTTP_CODE] " + ip + " -> " + code);
             if (code == 200) {
                 java.io.InputStream is = conn.getInputStream();
                 String body = new String(is.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
                 is.close();
                 return body.contains("spotify-automation-hub");
             }
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            Log.w(TAG, "[DISCOVERY][PROBE_FAILED] " + ip + " -> " + e.getClass().getSimpleName());
+        }
         return false;
     }
 
-    private String scanSubnet(String subnetPrefix) {
+    private String listenForBroadcastIp(int timeoutMs) {
+        DatagramSocket socket = null;
+        try {
+            socket = new DatagramSocket(8888);
+            socket.setBroadcast(true);
+            socket.setSoTimeout(timeoutMs);
+
+            byte[] buffer = new byte[1024];
+            long deadline = System.currentTimeMillis() + timeoutMs;
+
+            while (System.currentTimeMillis() < deadline) {
+                DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+                socket.receive(packet);
+
+                String data = new String(packet.getData(), 0, packet.getLength(), java.nio.charset.StandardCharsets.UTF_8);
+                JSONObject json = new JSONObject(data);
+                if (!"SPOTIFY_SERVER".equals(json.optString("type"))) {
+                    continue;
+                }
+
+                String sourceIp = packet.getAddress() != null ? packet.getAddress().getHostAddress() : null;
+                String payloadIp = json.optString("ip", null);
+                String chosenIp = sourceIp != null && !sourceIp.isEmpty() ? sourceIp : payloadIp;
+
+                Log.i(TAG, "[DISCOVERY][BROADCAST_FOUND] source=" + sourceIp + " payload=" + payloadIp + " chosen=" + chosenIp);
+                if (chosenIp != null && isOurServer(chosenIp)) {
+                    return chosenIp;
+                }
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "[DISCOVERY][BROADCAST_LISTEN_FAILED] " + e.getClass().getSimpleName());
+        } finally {
+            if (socket != null)
+                socket.close();
+        }
+        return null;
+    }
+
+    private String scanSubnet(String subnetPrefix, String localIp) {
         ExecutorService executor = Executors.newFixedThreadPool(32);
         List<Future<String>> futures = new ArrayList<>();
 
         for (int i = 1; i < 255; i++) {
             final String ip = subnetPrefix + i;
+            if (ip.equals(localIp)) {
+                continue;
+            }
             futures.add(executor.submit(() -> {
-                // Port check first (fast), then identity validation (slower, targeted)
-                if (isPortOpen(ip, SERVER_PORT, 500) && isOurServer(ip)) {
+                // Direct HTTP validation only. Do not prefilter with ICMP/TCP reachability checks.
+                if (isOurServer(ip)) {
                     return ip;
                 }
                 return null;
@@ -121,12 +180,21 @@ public class DiscoveryManager {
         return null;
     }
 
-    private boolean isPortOpen(String ip, int port, int timeout) {
-        try (Socket socket = new Socket()) {
-            socket.connect(new InetSocketAddress(ip, port), timeout);
-            return true;
-        } catch (Exception e) {
-            return false;
+    private String deriveSubnetPrefix(String ipAddress) {
+        if (ipAddress == null)
+            return null;
+
+        String[] parts = ipAddress.split("\\.");
+        if (parts.length != 4)
+            return null;
+
+        try {
+            for (String part : parts) {
+                Integer.parseInt(part);
+            }
+            return parts[0] + "." + parts[1] + "." + parts[2] + ".";
+        } catch (NumberFormatException e) {
+            return null;
         }
     }
 
